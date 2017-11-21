@@ -331,15 +331,16 @@ def generate_dot_letter(pix, width, height):
             most_colored = (255, 255, 255)
             for k in range(i-dot_cell_size, i):
                 for l in range(j-dot_cell_size, j):
-                    if pix[k, l] != (255, 255, 255):
+                    numb = 50
+                    if pix[k, l][0] <= numb and pix[k, l][1] <= numb and pix[k, l][2] <= numb:
                         check = True
                         if (pix[k, l][0] < most_colored[0] or pix[k, l][1] < most_colored[1]
                             or pix[k, l][2] < most_colored[2]):
                             most_colored = pix[k, l]
             if check:
-                for k in range(i-dot_cell_size+dot_space_for_cell, i-dot_space_for_cell):
-                    for l in range(j-dot_cell_size+dot_space_for_cell, j-dot_space_for_cell):
-                        coords.append((k, l, most_colored))
+                for k in range(i-dot_cell_size+dot_space_for_cell*0, i-dot_space_for_cell):
+                    for l in range(j-dot_cell_size+dot_space_for_cell*0, j-dot_space_for_cell):
+                        coords.append((k, l, (0, 0, 0)))
     return coords
 
 
@@ -348,7 +349,7 @@ def generate_line_letter(pix, width, height):
     line_line_width = 3
     line_space_for_cell = 1
     coords = []
-    for i in range(line_line_width, height, line_line_width):
+    for i in range(line_line_width-2, height, line_line_width):
         for j in range(width):
             for k in range(line_space_for_cell):
                 try:
@@ -374,20 +375,20 @@ def generate_letter(letter, font, size, mode, dop_mode):
             font = ImageFont.truetype(font + 'd' + '.ttf', kek)
     else:
         font = ImageFont.truetype(font + '.ttf', kek)
-    loc_draw.text((0, 0), letter, (0, 0, 0), font)
+    loc_draw.text((20, 0), letter, (0, 0, 0), font)
     data = open('Symbol_add_data.txt').readlines()
     k = 1
     diff = 0
     left_pix, top_pix, right_pix, bottom_pix = 0, 0, 0, 0
     for elem in data:
         elem = elem.rstrip().split(' ')
-        if letter == elem[0]:
-            diff = int(elem[1])
-            k = float(elem[2])
-            left_pix = int(elem[3])
-            top_pix = int(elem[4])
-            right_pix = int(elem[5])
-            bottom_pix = int(elem[6])
+        if letter == elem[0] and dop_mode == elem[1]:
+            diff = int(elem[2])
+            k = float(elem[3])
+            left_pix = int(elem[4])
+            top_pix = int(elem[5])
+            right_pix = int(elem[6])
+            bottom_pix = int(elem[7])
     loc_img = loc_img.crop((left_pix, top_pix, right_pix + 1, bottom_pix + 1))
 
     before = loc_img.size[1]
