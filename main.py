@@ -413,7 +413,8 @@ def generate_letter(letter, font, size, mode, dop_mode):
     return coords, round(size*k - diff*size*k/before)
 
 
-def write_letter(letter_coords, begin_x, begin_y, bold, size_of_leteer, space, local_font_size, add_space):
+def write_letter(letter_coords, begin_x, begin_y, bold, size_of_leteer, space, local_font_size, add_space, align,
+                 align_mode):
     new_x = 0
     for i, elem in enumerate(letter_coords):
         r, g, b = elem[2]
@@ -428,14 +429,15 @@ def write_letter(letter_coords, begin_x, begin_y, bold, size_of_leteer, space, l
         letter_coords[i] = list(letter_coords[i])
         letter_coords[i][2] = (r, g, b)
     for elem in letter_coords:
-        if elem[0]+begin_x+right_space_cnv > width_of_cnv:
+        if elem[0]+begin_x+right_space_cnv > width_of_cnv and align_mode == 'left':
             begin_x = left_space_cnv
             begin_y = begin_y + (local_font_size+add_space)*1.325 + space_betwen_lines
         if elem[1]+begin_y+bottom_space_cnv > height_of_cnv:
             return begin_x, begin_y, 'space'
     for elem in letter_coords:
         r, g, b = elem[2]
-        img_from_tk_cnv_draw.point((elem[0]+begin_x, elem[1]+begin_y+local_font_size+add_space-size_of_leteer), "#%02x%02x%02x" % (r, g, b))
+        img_from_tk_cnv_draw.point((elem[0]+begin_x+align,
+                                elem[1]+begin_y+local_font_size+add_space-size_of_leteer), "#%02x%02x%02x" % (r, g, b))
         if elem[0] > new_x:
             new_x = elem[0]
     return new_x + space + begin_x, begin_y, 'ok'
@@ -493,8 +495,10 @@ class Symbol:
     space = None
     line_space = None
     add_space_for_size = None
+    align_mode = None
+    alignment = None
 
-    def __init__(self, is_my_letter, name, bolding, mode, dop_mode, size, font, space, line_space):
+    def __init__(self, is_my_letter, name, bolding, mode, dop_mode, size, font, space, line_space, align_mode):
         self.is_my_letter = is_my_letter
         self.name = name
         self.bolding = bolding
@@ -505,6 +509,7 @@ class Symbol:
         self.space = space
         self.line_space = line_space
         self.add_space_for_size = 0
+        self.align_mode = align_mode
 
     def __eq__(self, other):
         return self.name == other.name
@@ -533,18 +538,22 @@ def get_text():
             if text[i] == '*':
                 name, i = find_name(text, i)
                 if name == '':
-                    new_array_of_symbol.append(Symbol(False, '*', bold, letter_mode, dop_mode, size_of_font, current_font, space_betwen_letters, space_betwen_lines))
+                    new_array_of_symbol.append(Symbol(False, '*', bold, letter_mode, dop_mode, size_of_font,
+                                                  current_font, space_betwen_letters, space_betwen_lines, alignment))
                     if i < len(text):
                         while text[i] == '*':
-                            new_array_of_symbol.append(Symbol(False, '*', bold, letter_mode, dop_mode, size_of_font, current_font, space_betwen_letters, space_betwen_lines))
+                            new_array_of_symbol.append(Symbol(False, '*', bold, letter_mode, dop_mode, size_of_font,
+                                                    current_font, space_betwen_letters, space_betwen_lines, alignment))
                             i += 1
                             if i == len(text):
                                 break
                         i -= 1
                 else:
-                    new_array_of_symbol.append(Symbol(True, name, bold, letter_mode, dop_mode, size_of_font, current_font, space_betwen_letters, space_betwen_lines))
+                    new_array_of_symbol.append(Symbol(True, name, bold, letter_mode, dop_mode, size_of_font,
+                                                    current_font, space_betwen_letters, space_betwen_lines, alignment))
             else:
-                new_array_of_symbol.append(Symbol(False, text[i], bold, letter_mode, dop_mode, size_of_font, current_font, space_betwen_letters, space_betwen_lines))
+                new_array_of_symbol.append(Symbol(False, text[i], bold, letter_mode, dop_mode, size_of_font,
+                                                  current_font, space_betwen_letters, space_betwen_lines, alignment))
             i += 1
         return new_array_of_symbol
 
@@ -628,7 +637,7 @@ def get_text():
         array_of_symbols = parse(text)
     star_begin = False
     global begin_x, begin_y
-    begin_x = left_space_cnv
+    begin_x = 0
     begin_y = top_space_cnv
     img_from_tk_cnv = Image.new('RGB', (width_of_cnv, height_of_cnv), 'white')
     photoimg_from_tk_cnv = ImageTk.PhotoImage(img_from_tk_cnv)
@@ -637,21 +646,59 @@ def get_text():
 
     max_space = 0
     start_line = 0
+    line_size = 0
+    add_data = open('Symbol_add_data.txt').readlines()
     for i, symbol in enumerate(array_of_symbols):
-        if max_space < symbol.size:
+        if symbol.name == ' ':
+            line_size += symbol.size//2 - symbol.space
+        else:
+            if symbol.is_my_letter:
+                coords = insert_my_letter(symbol.name)
+                if coords == 'error':
+                    return None
+                l = min(coords, key=lambda x: x[0])[0]
+                r = max(coords, key=lambda x: x[0])[0]
+                t = min(coords, key=lambda x: x[1])[1]
+                b = max(coords, key=lambda x: x[1])[1]
+                line_size += (r - l)*(symbol.size/(b - t))
+            else:
+                for elem in add_data:
+                    elem = elem.rstrip().split(' ')
+                    if elem[0] == symbol.name and elem[1] == symbol.dop_mode:
+                        line_size += round((int(elem[6]) - int(elem[4]))*
+                                         (symbol.size/(int(elem[7]) - int(elem[5])))*float(elem[3]))
+        line_size += symbol.space*0.8
+
+        if max_space < symbol.size and symbol.name != '\n':
             max_space = symbol.size
+
         if symbol.name == '\n':
+            line_size -= symbol.space
             for j, elem in enumerate(array_of_symbols[start_line:i]):
                 array_of_symbols[start_line+j].add_space_for_size = max_space - elem.size
+                if elem.align_mode == 'left':
+                    array_of_symbols[start_line+j].alignment = left_space_cnv
+                elif elem.align_mode == 'right':
+                    array_of_symbols[start_line+j].alignment = width_of_cnv - line_size - right_space_cnv
+                elif elem.align_mode == 'center':
+                    array_of_symbols[start_line + j].alignment = (width_of_cnv - line_size - left_space_cnv
+                                                                  - right_space_cnv)//2
+
             start_line = i + 1
             max_space = 0
+            line_size = 0
             continue
         if i == len(array_of_symbols) - 1:
+            #line_size -= symbol.space
             for j, elem in enumerate(array_of_symbols[start_line:]):
                 array_of_symbols[start_line + j].add_space_for_size = max_space - elem.size
-            start_line = i + 1
-            max_space = 0
-            continue
+                if elem.align_mode == 'left':
+                    array_of_symbols[start_line+j].alignment = left_space_cnv
+                elif elem.align_mode == 'right':
+                    array_of_symbols[start_line+j].alignment = width_of_cnv - line_size - right_space_cnv
+                elif elem.align_mode == 'center':
+                    array_of_symbols[start_line + j].alignment = (width_of_cnv - line_size - left_space_cnv
+                                                                  - right_space_cnv)//2
 
     for i, symbol in enumerate(array_of_symbols):
         if symbol.name == '*' and not star_begin:
@@ -661,7 +708,8 @@ def get_text():
             star_begin = False
         if symbol.name == '*' and star_begin:
             letter_coords, size_of_letter = generate_letter('*', symbol.font, symbol.size, symbol.mode, symbol.dop_mode)
-            begin_x, begin_y, ans = write_letter(letter_coords, begin_x, begin_y, symbol.bolding, size_of_letter, symbol.space, symbol.size, symbol.add_space_for_size)
+            begin_x, begin_y, ans = write_letter(letter_coords, begin_x, begin_y, symbol.bolding, size_of_letter,
+                             symbol.space, symbol.size, symbol.add_space_for_size, symbol.alignment, symbol.align_mode)
             if ans == 'space':
                 space_over = True
             photoimg_from_tk_cnv = ImageTk.PhotoImage(img_from_tk_cnv)
@@ -673,7 +721,8 @@ def get_text():
             letter_coords = insert_my_letter(symbol.name)
             if letter_coords == 'error':
                 return None
-            begin_x, begin_y, ans = write_letter(letter_coords, begin_x, begin_y, symbol.bolding, symbol.size, symbol.space, symbol.size, symbol.add_space_for_size)
+            begin_x, begin_y, ans = write_letter(letter_coords, begin_x, begin_y, symbol.bolding, symbol.size,
+                            symbol.space, symbol.size, symbol.add_space_for_size, symbol.alignment, symbol.align_mode)
             if ans == 'space':
                 space_over = True
             photoimg_from_tk_cnv = ImageTk.PhotoImage(img_from_tk_cnv)
@@ -684,7 +733,7 @@ def get_text():
             if symbol.name == ' ':
                 begin_x += symbol.size//2
             elif symbol.name == '\n':
-                begin_x = left_space_cnv
+                begin_x = 0
                 space_line_arr = []
                 for symb in reversed(array_of_symbols[:i]):
                     if symb.name == '\n':
@@ -701,8 +750,10 @@ def get_text():
 
                 begin_y = begin_y + down*1.325 + symbol.line_space
             else:
-                letter_coords, size_of_letter = generate_letter(symbol.name, symbol.font, symbol.size, symbol.mode, symbol.dop_mode)
-                begin_x, begin_y, ans = write_letter(letter_coords, begin_x, begin_y, symbol.bolding, size_of_letter, symbol.space, symbol.size, symbol.add_space_for_size)
+                letter_coords, size_of_letter = generate_letter(symbol.name, symbol.font, symbol.size,
+                                                                symbol.mode, symbol.dop_mode)
+                begin_x, begin_y, ans = write_letter(letter_coords, begin_x, begin_y, symbol.bolding, size_of_letter,
+                            symbol.space, symbol.size, symbol.add_space_for_size, symbol.alignment, symbol.align_mode)
                 if ans == 'space':
                     space_over = True
                 photoimg_from_tk_cnv = ImageTk.PhotoImage(img_from_tk_cnv)
@@ -987,8 +1038,8 @@ def init():
     space_betwen_lines = int(settings[3].rstrip())
     width_of_cnv = int(settings[4].rstrip())
     height_of_cnv = int(settings[5].rstrip())
-    right_space_cnv = int(settings[6].rstrip())
-    left_space_cnv = int(settings[7].rstrip())
+    right_space_cnv = int(settings[6].rstrip()) - 2
+    left_space_cnv = int(settings[7].rstrip()) + 2
     top_space_cnv = int(settings[8].rstrip())
     bottom_space_cnv = int(settings[9].rstrip())
     cell_size = int(settings[10].rstrip())
@@ -1016,9 +1067,10 @@ def clear_text():
 
 
 bold = 0
+alignment = 'left'
 init()
 current_text = ''
-begin_x = right_space_cnv
+begin_x = 0
 begin_y = top_space_cnv
 pix_per_mm, mm_per_pix = transform(monitor_size)
 
@@ -1046,28 +1098,28 @@ menu.add_cascade(label='Help', menu=hm)
 hm.add_command(label='Doc', command=open_doc)
 
 # Text part
-text_frame = tk.LabelFrame(window, width=202, height=150)
+text_frame = tk.LabelFrame(window, width=280, height=200)
 text_frame.place(x=600, y=20)
-text_for_cnv = tk.Text(text_frame, width=22, height=6, wrap=tk.NONE)
+text_for_cnv = tk.Text(text_frame, width=32, height=9, wrap=tk.NONE)
 text_for_cnv.place(relx=0, rely=0)
 
 vscroll_for_text = tk.Scrollbar(text_frame, orient=tk.VERTICAL)
 text_for_cnv.config(yscrollcommand=vscroll_for_text.set)
 vscroll_for_text.config(command=text_for_cnv.yview)
-vscroll_for_text.place(relx=0.92, rely=0, relheight=0.65)
+vscroll_for_text.place(relx=0.94, rely=0, relheight=0.75)
 hscroll_for_text = tk.Scrollbar(text_frame, orient=tk.HORIZONTAL)
 text_for_cnv.config(xscrollcommand=hscroll_for_text.set)
 hscroll_for_text.config(command=text_for_cnv.xview)
-hscroll_for_text.place(relx=0, rely=0.65, relwidth=1)
+hscroll_for_text.place(relx=0, rely=0.76, relwidth=1)
 
 button_for_text = tk.Button(text_frame, text='Get', command=get_text)
-button_for_text.place(relx=0.1, rely=0.8)
+button_for_text.place(relx=0.1, rely=0.85)
 
 button_for_image = tk.Button(text_frame, text='Save', command=create_image)
-button_for_image.place(relx=0.39, rely=0.8)
+button_for_image.place(relx=0.425, rely=0.85)
 
 button_for_clear = tk.Button(text_frame, text='Clear', command=clear_text)
-button_for_clear.place(relx=0.7, rely=0.8)
+button_for_clear.place(relx=0.75, rely=0.85)
 
 # Canvas part
 main_cnv = tk.Canvas(window, width=width_of_cnv, height=height_of_cnv, bg='white')
@@ -1090,7 +1142,7 @@ hscroll_for_cnv.place(x=15, y=449, relwidth=0.635)
 
 # Letter part
 font_frame = tk.LabelFrame(window, text='Font')
-font_frame.place(x=600, y=190)
+font_frame.place(x=600, y=340)
 size_of_font_entry = tk.Entry(font_frame, width=5)
 size_of_font_entry.insert(tk.END, pix_to_mm(size_of_font))
 size_of_font_entry.grid(row=0, column=1)
@@ -1139,8 +1191,23 @@ def b_mode():
     dop_mode = 'b'
 
 
+def r_align_mode():
+    global alignment
+    alignment = 'right'
+
+
+def l_align_mode():
+    global alignment
+    alignment = 'left'
+
+
+def c_align_mode():
+    global alignment
+    alignment = 'center'
+
+
 mode_frame = tk.LabelFrame(window, text='Mode')
-mode_frame.place(x=720, y=310)
+mode_frame.place(x=600, y=230)
 var_mode = tk.IntVar()
 var_mode.set(letter_mode)
 rb_letter_mode_solid = tk.Radiobutton(mode_frame, text='Solid', variable=var_mode, value='solid', command=solid_mode)
@@ -1159,9 +1226,18 @@ rb_letter_mode_normal.grid(row=0, column=1)
 rb_letter_mode_italic.grid(row=1, column=1)
 rb_letter_mode_bold.grid(row=2, column=1)
 
+var_align_mode = tk.StringVar()
+var_align_mode.set(alignment)
+rb_alignment_l = tk.Radiobutton(mode_frame, text='Left', variable=var_align_mode, value='left', command=l_align_mode)
+rb_alignment_r = tk.Radiobutton(mode_frame, text='Right', variable=var_align_mode, value='right', command=r_align_mode)
+rb_alignment_c = tk.Radiobutton(mode_frame, text='Center', variable=var_align_mode, value='center', command=c_align_mode)
+rb_alignment_l.grid(row=0, column=2)
+rb_alignment_r.grid(row=1, column=2)
+rb_alignment_c.grid(row=2, column=2)
+
 # Size part
 frame_cnv_size = tk.LabelFrame(window, text='Size of canvas')
-frame_cnv_size.place(x=600, y=310)
+frame_cnv_size.place(x=785, y=360)
 width_cnv_label = tk.Label(frame_cnv_size, text='Width:')
 height_cnv_label = tk.Label(frame_cnv_size, text='Height:')
 width_cnv_entry = tk.Entry(frame_cnv_size, width=7)
@@ -1175,8 +1251,8 @@ height_cnv_entry.grid(row=1, column=1)
 
 #Bold part
 scale_frame = tk.LabelFrame(window, text='Bolding')
-scale_frame.place(x=600, y=385)
-bold_scale = tk.Scale(scale_frame, from_=100, to=-100, orient=tk.HORIZONTAL)
+scale_frame.place(x=810, y=230)
+bold_scale = tk.Scale(scale_frame, from_=100, to=-100, orient=tk.VERTICAL)
 bold_scale.set(bold)
 bold_scale.pack()
 
@@ -1243,5 +1319,5 @@ def apply():
 
 
 change_font_butt = tk.Button(window, text='Apply', command=apply)
-change_font_butt.place(x=750, y=420)
+change_font_butt.place(x=730, y=430)
 window.mainloop()
